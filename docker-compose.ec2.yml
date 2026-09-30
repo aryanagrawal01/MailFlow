@@ -1,0 +1,12 @@
+# EC2 deployment overlay for hosts where Nginx already owns public ports 80/443.
+# The frontend and API are published only on loopback and routed through a
+# dedicated Nginx virtual host. The standard production Caddy ingress is not
+# started when Compose is invoked with the explicit service list in README.
+services:
+  api:
+    ports:
+      - "127.0.0.1:4400:4000"
+
+  frontend:
+    ports:
+      - "127.0.0.1:4410:80"

@@ -263,6 +263,18 @@ docker compose --env-file .env.production -f docker-compose.production.yml ps
 docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 api worker ingress
 ```
 
+#### Existing Nginx on EC2
+
+When the host already has Nginx on ports 80/443, use `docker-compose.ec2.yml` and do not start the Caddy `ingress` service. For a single public hostname, set `APP_DOMAIN`, `FRONTEND_ORIGIN`, and `VITE_API_BASE_URL` to `https://mailflow.legaltalk.help`; set both callback URIs to that host's `/api/.../callback` paths. The overlay binds the API and frontend only to `127.0.0.1:4400` and `127.0.0.1:4410`. Add a dedicated Nginx server block for `mailflow.legaltalk.help` that proxies `/api/`, `/health`, `/ready`, and `/admin/queues` to port 4400 and other paths to 4410. Keep PostgreSQL, Redis, and Elasticsearch unpublished. Start only the intended services so the Caddy ingress is left stopped:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.ec2.yml config --quiet
+docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.ec2.yml up --build -d postgres redis elasticsearch migrate api frontend
+docker compose --env-file .env.production -f docker-compose.production.yml -f docker-compose.ec2.yml ps
+```
+
+Start `worker` only after the complete Ethereal SMTP configuration is installed. The EC2 overlay intentionally keeps the existing host Nginx in charge of public ports and uses private loopback bindings for MailFlow.
+
 The deployment must use the exact callback URIs in the provider consoles:
 
 - Google: `https://<API_DOMAIN>/api/auth/google/callback`
