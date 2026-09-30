@@ -26,6 +26,7 @@ const serverEnvironmentSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_OAUTH_STATE_SECRET: z.string().min(32).optional(),
+  FIREBASE_PROJECT_ID: z.string().min(1).optional(),
   SLACK_CLIENT_ID: z.string().min(1).optional(),
   SLACK_CLIENT_SECRET: z.string().min(1).optional(),
   SLACK_REDIRECT_URI: z.string().url().optional(),

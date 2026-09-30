@@ -17,6 +17,7 @@ const environment = loadServerEnvironment({
   GOOGLE_CLIENT_SECRET: "mailflow-test-client-secret",
   GOOGLE_REDIRECT_URI: "http://localhost:4000/api/auth/google/callback",
   GOOGLE_OAUTH_STATE_SECRET: "test-oauth-state-secret-which-is-long-enough",
+  FIREBASE_PROJECT_ID: "mailflow-test-project",
   FRONTEND_ORIGIN: "http://localhost:5173",
 });
 const prisma = createPrismaClient(environment.DATABASE_URL);
@@ -40,10 +41,17 @@ const googleOAuthProvider: GoogleOAuthProvider = {
     };
   },
 };
-const app = createApp(pino({ enabled: false }), environment, infrastructure, { prisma, googleOAuthProvider });
+const firebaseTokenVerifier = {
+  async verifyIdToken(token: string) {
+    if (token !== "valid-firebase-token") throw new Error("invalid token");
+    return { uid: `firebase-${suffix}`, email: `firebase-${suffix}@example.test`, name: "Firebase Test User", picture: null, emailVerified: true, signInProvider: "google.com" };
+  },
+};
+const app = createApp(pino({ enabled: false }), environment, infrastructure, { prisma, googleOAuthProvider, firebaseTokenVerifier });
 let server: ReturnType<typeof app.listen>;
 let baseUrl = "";
 let ownerId = "";
+let localUserId = "";
 
 before(async () => {
   server = app.listen(0, "127.0.0.1");
@@ -58,10 +66,56 @@ after(async () => {
     await once(server, "close");
   }
   await prisma.user.deleteMany({
-    where: { OR: [{ id: ownerId || "00000000-0000-0000-0000-000000000000" }, { googleSubject: `auth-test-${suffix}` }] },
+    where: { OR: [{ id: ownerId || "00000000-0000-0000-0000-000000000000" }, { id: localUserId || "00000000-0000-0000-0000-000000000000" }, { googleSubject: `auth-test-${suffix}` }, { googleSubject: `firebase:firebase-${suffix}` }] },
   });
   await prisma.$disconnect();
   await closeInfrastructureClients(infrastructure);
+});
+
+test("MailFlow password account registration, username/email sign-in, and validation", async () => {
+  const username = `member-${suffix.slice(0, 8)}`;
+  const email = `local-${suffix}@example.test`;
+  const signup = await fetch(`${baseUrl}/api/auth/register`, {
+    method: "POST",
+    headers: { origin: environment.FRONTEND_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ name: "Local Test Member", username, email, contactNumber: "+1 555 123 4567", password: "a-long-test-password" }),
+  });
+  assert.equal(signup.status, 201, await signup.clone().text());
+  assert.equal((await signup.json() as { authenticated: boolean }).authenticated, true);
+  const signupCookie = cookiePair(signup, environment.SESSION_COOKIE_NAME);
+  const profileResponse = await fetch(`${baseUrl}/api/auth/me`, { headers: { cookie: signupCookie } });
+  assert.equal(profileResponse.status, 200);
+  const profile = (await profileResponse.json() as { user: { id: string; name: string; username: string; email: string; contactNumber: string } }).user;
+  assert.deepEqual({ name: profile.name, username: profile.username, email: profile.email, contactNumber: profile.contactNumber }, {
+    name: "Local Test Member", username, email, contactNumber: "+1 555 123 4567",
+  });
+  localUserId = profile.id;
+  const stored = await prisma.user.findUnique({ where: { id: localUserId }, select: { passwordHash: true, googleSubject: true } });
+  assert.ok(stored?.passwordHash?.startsWith("scrypt$"));
+  assert.equal(stored?.googleSubject, null);
+
+  const logout = await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", headers: { cookie: signupCookie } });
+  assert.equal(logout.status, 204);
+  const wrongPassword = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier: username, password: "incorrect-password" }),
+  });
+  assert.equal(wrongPassword.status, 401);
+  const login = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST", headers: { origin: environment.FRONTEND_ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ identifier: email.toUpperCase(), password: "a-long-test-password" }),
+  });
+  assert.equal(login.status, 200, await login.clone().text());
+  const loginCookie = cookiePair(login, environment.SESSION_COOKIE_NAME);
+  assert.equal((await fetch(`${baseUrl}/api/auth/me`, { headers: { cookie: loginCookie } })).status, 200);
+  await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", headers: { cookie: loginCookie } });
+
+  const duplicate = await fetch(`${baseUrl}/api/auth/register`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Other Member", username, email: `another-${suffix}@example.test`, contactNumber: "+1 555 123 4567", password: "a-long-test-password" }),
+  });
+  assert.equal(duplicate.status, 409);
+  const invalid = await fetch(`${baseUrl}/api/auth/register`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "X", username: "x", email: "bad", contactNumber: "1", password: "short" }),
+  });
+  assert.equal(invalid.status, 400);
 });
 
 test("Google OAuth state, protected routes, /me, logout, expiry, and revocation", async () => {
@@ -128,6 +182,29 @@ test("Google OAuth state, protected routes, /me, logout, expiry, and revocation"
   assert.ok(revokedSession?.revokedAt);
   const revokedMe = await fetch(`${baseUrl}/api/auth/me`, { headers: { cookie: logoutCookie } });
   assert.equal(revokedMe.status, 401);
+});
+
+test("Firebase ID token creates a MailFlow session and rejects invalid tokens and foreign origins", async () => {
+  const rejected = await fetch(`${baseUrl}/api/auth/firebase`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ idToken: "bad-token" }),
+  });
+  assert.equal(rejected.status, 401);
+  const foreignOrigin = await fetch(`${baseUrl}/api/auth/firebase`, {
+    method: "POST", headers: { origin: "https://attacker.example", "content-type": "application/json" }, body: JSON.stringify({ idToken: "valid-firebase-token" }),
+  });
+  assert.equal(foreignOrigin.status, 403);
+  const login = await fetch(`${baseUrl}/api/auth/firebase`, {
+    method: "POST", headers: { origin: environment.FRONTEND_ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ idToken: "valid-firebase-token" }),
+  });
+  assert.equal(login.status, 200, await login.clone().text());
+  assert.equal((await login.json() as { authenticated: boolean }).authenticated, true);
+  const cookie = cookiePair(login, environment.SESSION_COOKIE_NAME);
+  const currentUser = await fetch(`${baseUrl}/api/auth/me`, { headers: { cookie } });
+  assert.equal(currentUser.status, 200);
+  assert.equal((await currentUser.json() as { user: { email: string } }).user.email, `firebase-${suffix}@example.test`);
+  const logout = await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", headers: { cookie } });
+  assert.equal(logout.status, 204);
+  assert.equal((await fetch(`${baseUrl}/api/auth/me`, { headers: { cookie } })).status, 401);
 });
 
 test("production session and OAuth state cookies are Secure, HttpOnly, and SameSite=Lax", () => {

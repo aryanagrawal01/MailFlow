@@ -3,6 +3,7 @@ import { closeInfrastructureClients, createLogger, createInfrastructureClients, 
 import { createApp } from "./app.js";
 import { createPrismaClient } from "./db/client.js";
 import { createGoogleOAuthProvider } from "./auth/google-provider.js";
+import { createFirebaseTokenVerifier } from "./auth/firebase-provider.js";
 import { createDeliveryQueue, DeliveryQueueHandoff } from "@mailflow/shared";
 import { createOutboxHandoffStore } from "./queues/outbox-store.js";
 import { createElasticsearchClient } from "./elasticsearch/client.js";
@@ -27,6 +28,9 @@ const googleOAuthProvider = environment.GOOGLE_CLIENT_ID && environment.GOOGLE_C
       redirectUri: environment.GOOGLE_REDIRECT_URI,
     })
   : undefined;
+const firebaseTokenVerifier = environment.FIREBASE_PROJECT_ID
+  ? createFirebaseTokenVerifier(environment.FIREBASE_PROJECT_ID)
+  : undefined;
 const slackOAuthProvider = environment.SLACK_CLIENT_ID && environment.SLACK_CLIENT_SECRET && environment.SLACK_REDIRECT_URI
   ? createSlackOAuthProvider({
       clientId: environment.SLACK_CLIENT_ID,
@@ -46,6 +50,7 @@ const app = createApp(logger, environment, clients, {
   searchClient,
   searchIndexer,
   ...(googleOAuthProvider ? { googleOAuthProvider } : {}),
+  ...(firebaseTokenVerifier ? { firebaseTokenVerifier } : {}),
   ...(slackOAuthProvider ? { slackOAuthProvider } : {}),
 });
 const server = app.listen(environment.API_PORT, "0.0.0.0", () => {

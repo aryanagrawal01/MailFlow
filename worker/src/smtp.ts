@@ -12,6 +12,7 @@ export function createEtherealTransport(environment: ServerEnvironment): { trans
     host,
     port,
     secure: port === 465,
+    requireTLS: port === 587,
     auth: { user, pass },
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,

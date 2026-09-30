@@ -11,7 +11,7 @@ export const OAUTH_STATE_TTL_SECONDS = 600;
 export type AuthenticatedSession = {
   userId: string;
   sessionId: string;
-  user: { id: string; email: string; name: string; avatarUrl: string | null };
+  user: { id: string; email: string; name: string; username: string | null; contactNumber: string | null; avatarUrl: string | null };
 };
 
 export function sessionTokenHash(token: string): string {
@@ -140,7 +140,7 @@ export async function findActiveSession(
   return {
     userId: session.userId,
     sessionId: session.id,
-    user: { id: session.user.id, email: session.user.email, name: session.user.name, avatarUrl: session.user.avatarUrl },
+    user: { id: session.user.id, email: session.user.email, name: session.user.name, username: session.user.username, contactNumber: session.user.contactNumber, avatarUrl: session.user.avatarUrl },
   };
 }
 

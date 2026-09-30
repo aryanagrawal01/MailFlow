@@ -6,6 +6,7 @@ import { checkReadiness } from "@mailflow/shared";
 import type { createInfrastructureClients } from "@mailflow/shared";
 import type { PrismaClient } from "./generated/prisma/client.js";
 import type { GoogleOAuthProvider } from "./auth/google-provider.js";
+import type { FirebaseTokenVerifier } from "./auth/router.js";
 import { createRequireAuth } from "./auth/middleware.js";
 import { createAuthRouter } from "./auth/router.js";
 import type { DeliveryQueueHandoff } from "@mailflow/shared";
@@ -23,6 +24,7 @@ type InfrastructureClients = ReturnType<typeof createInfrastructureClients>;
 type AppAuthDependencies = {
   prisma: PrismaClient;
   googleOAuthProvider?: GoogleOAuthProvider;
+  firebaseTokenVerifier?: FirebaseTokenVerifier;
   handoff?: Pick<DeliveryQueueHandoff, "reconcile">;
   searchClient?: Client;
   searchIndexer?: DeliverySearchIndexer;

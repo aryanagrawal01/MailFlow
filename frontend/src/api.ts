@@ -1,7 +1,7 @@
 import { frontendEnvironment } from "./env";
 
 const API = `${frontendEnvironment.VITE_API_BASE_URL.replace(/\/$/, "")}/api`;
-export type User = { id: string; email: string; name: string; avatarUrl: string | null };
+export type User = { id: string; email: string; name: string; username: string | null; contactNumber: string | null; avatarUrl: string | null };
 export type Delivery = { id?: string; deliveryId?: string; recipientEmail: string; subject?: string; status: "scheduled" | "processing" | "sent" | "failed" | "delivery_unknown"; scheduledAt: string; sentAt: string | null; createdAt: string; campaign?: { subject: string } };
 export type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
 export type SlackConnection = { connected: boolean; team: { id: string; name: string } | null; channel: { id: string; name: string } | null; connectedAt: string | null };
@@ -23,6 +23,9 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 }
 export const api = {
   me: () => request<{ user: User }>("/auth/me"),
+  register: (input: { name: string; username: string; email: string; contactNumber: string; password: string }) => request<{ authenticated: true }>("/auth/register", { method: "POST", body: JSON.stringify(input) }),
+  passwordLogin: (identifier: string, password: string) => request<{ authenticated: true }>("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) }),
+  firebaseLogin: (idToken: string) => request<{ authenticated: true }>("/auth/firebase", { method: "POST", body: JSON.stringify({ idToken }) }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   schedule: (input: { subject: string; body: string; recipients: string[]; startAt: string; delayMs: number; hourlyLimit: number }) => request<{ campaign: { id: string }; deliveries: Delivery[] }>("/campaigns", { method: "POST", body: JSON.stringify(input) }),
   deliveries: (status: string, page: number, pageSize: number) => request<Page<Delivery>>(`/deliveries?status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}`),
@@ -32,5 +35,4 @@ export const api = {
   selectChannel: (channelId: string) => request<{ channel: { id: string; name: string } }>("/slack/channel", { method: "PUT", body: JSON.stringify({ channelId }) }),
   disconnectSlack: () => request<void>("/slack/connection", { method: "DELETE" }),
   slackStartUrl: () => `${API}/slack/oauth/start`,
-  googleStartUrl: () => `${API}/auth/google/start`,
 };

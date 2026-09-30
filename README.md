@@ -1,6 +1,6 @@
 # MailFlow
 
-MailFlow is a reliable email scheduling and delivery platform. This repository contains a TypeScript workspace, PostgreSQL/Prisma source of truth, Google sign-in with database-backed sessions, durable BullMQ scheduling, Ethereal delivery, distributed timing limits, and Elasticsearch delivery search.
+MailFlow is a reliable email scheduling and delivery platform. This repository contains a TypeScript workspace, PostgreSQL/Prisma source of truth, Google sign-in plus MailFlow-managed username/password accounts with database-backed sessions, durable BullMQ scheduling, Ethereal delivery, distributed timing limits, and Elasticsearch delivery search.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ MailFlow is a reliable email scheduling and delivery platform. This repository c
 
 The frontend uses port `5173`, the API uses `4000`, PostgreSQL uses `5432`, Redis uses `6379`, and Elasticsearch uses `9200` by default. Ports can be changed in the root `.env` file.
 
-For Google sign-in, create an OAuth 2.0 **Web application** client in Google Cloud Console. Register the exact redirect URI configured by `GOOGLE_REDIRECT_URI`; the local default is `http://localhost:4000/api/auth/google/callback`. Add the client ID, client secret, redirect URI, and a unique random `GOOGLE_OAUTH_STATE_SECRET` of at least 32 characters to root `.env`. The local frontend origin defaults to `http://localhost:5173`.
+MailFlow username/password accounts are created and authenticated by the MailFlow API. Registration asks for full name, username, email, contact number, and password; passwords are stored as salted scrypt hashes, and no Firebase verification email is needed. Firebase remains enabled only for Google sign-in. In Firebase Console, enable Google under **Authentication → Sign-in method**, set the public Firebase Web App values (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`), and set backend `FIREBASE_PROJECT_ID` to the same project ID. Add the frontend hostname under **Authentication → Settings → Authorized domains**. Do not create or upload a Firebase service-account key for this flow. The local frontend origin defaults to `http://localhost:5173`; add `localhost` to Firebase Authorized domains when using a local project configuration.
 
 ## Local infrastructure
 
@@ -124,13 +124,13 @@ Measured 1,000-recipient run in this environment: **1,002 submitted → 1,000 ac
 
 ## Google sign-in and sessions
 
-The API exposes `GET /api/auth/google/start` to begin the Google authorization-code flow, `GET /api/auth/google/callback` to validate state/PKCE and the Google identity token, `GET /api/auth/me` to return the current MailFlow user, and `POST /api/auth/logout` to revoke the current session. The API stores only the Google subject, email, name, and avatar URL; Google access/refresh tokens are not retained. OAuth state, nonce, and the PKCE verifier are encrypted in a short-lived HttpOnly, SameSite=Lax callback cookie. MailFlow session tokens are random opaque values in HttpOnly, SameSite=Lax cookies while only their SHA-256 hashes are stored in PostgreSQL. Sessions expire after `SESSION_TTL_HOURS` (default 168 hours) and logout records revocation. In production cookies are Secure and `FRONTEND_ORIGIN` must match the deployed frontend origin.
+The API exposes `POST /api/auth/register` and `POST /api/auth/login` for MailFlow username/password accounts, `POST /api/auth/firebase` for Google sign-in, `GET /api/auth/me` to return the current MailFlow profile, and `POST /api/auth/logout` to revoke the current session. Registration stores a salted scrypt password hash and account name, username, email, and contact number. MailFlow does not send or require verification email for these accounts. Firebase Admin verifies Google ID tokens against `FIREBASE_PROJECT_ID`; non-Google Firebase sign-in tokens are rejected. MailFlow session tokens are random opaque values in HttpOnly, SameSite=Lax cookies while only their SHA-256 hashes are stored in PostgreSQL. Sessions expire after `SESSION_TTL_HOURS` (default 168 hours) and logout records revocation. In production cookies are Secure and `FRONTEND_ORIGIN` must match the deployed frontend origin.
 
-Until the Google settings are configured together, the Google start endpoint returns HTTP 503; no mock login is provided. The React frontend uses the real sign-in endpoint, loads `/api/auth/me`, displays the signed-in profile, and revokes the session on logout.
+Google sign-in requires the Google provider in Firebase Console and matching frontend/backend project configuration. MailFlow password accounts do not depend on Firebase email/password or email delivery. The React frontend supports Google sign-in and MailFlow account registration/sign-in; both create the same database-backed application session.
 
 ## Frontend user flows
 
-The responsive React + TypeScript + Tailwind frontend provides the Google sign-in screen and authenticated workspace pages for overview, campaign composition, scheduled deliveries, sent/failed deliveries, Elasticsearch search, and Slack settings. Run it with `npm run dev:frontend`; set the public `VITE_API_BASE_URL` in `frontend/.env.local` only when the API is not at `http://localhost:4000`.
+The responsive React + TypeScript + Tailwind frontend provides Google sign-in, MailFlow username/password sign-in and registration (name, username, email, contact number), and authenticated workspace pages for overview, campaign composition, scheduled deliveries, sent/failed deliveries, Elasticsearch search, and Slack settings. Run it with `npm run dev:frontend`; set the public Firebase values and `VITE_API_BASE_URL` in `frontend/.env.local` as needed.
 
 The composer accepts CSV files with an `email` column and plain text files with line, comma, or semicolon separators. It shows valid unique addresses, invalid entries, duplicates, and the total detected count before scheduling. Invalid addresses prevent submission. Campaign creation calls the authenticated `POST /api/campaigns` endpoint; queue timing remains backend-owned.
 
@@ -277,12 +277,11 @@ Start `worker` only after the complete Ethereal SMTP configuration is installed.
 
 The checked-in host-specific Nginx configuration is `deploy/nginx/mailflow.conf`. It references the currently installed LegalTalk Origin certificate, whose SAN does not include `mailflow.legaltalk.help`; this matches the host's existing Cloudflare Full (non-Strict) setup. Replace it with a certificate covering the MailFlow hostname before enabling Cloudflare Full (Strict).
 
-The deployment must use the exact callback URIs in the provider consoles:
+Slack deployment must use the exact callback URI in the Slack app settings:
 
-- Google: `https://<API_DOMAIN>/api/auth/google/callback`
 - Slack: `https://<API_DOMAIN>/api/slack/oauth/callback`
 
-Set `FRONTEND_ORIGIN` to the exact frontend origin including `https://`, and set `VITE_API_BASE_URL` to the HTTPS API origin. Google state/nonce/PKCE and Slack state validation remain enabled. The application only stores Google profile identity; Slack bot tokens are encrypted with `SLACK_TOKEN_ENCRYPTION_KEY`. `ELASTICSEARCH_API_KEY` is needed only when using a secured Elasticsearch cluster. The included single-node Elasticsearch disables its own authentication and is intended only on a private deployment network; use managed secured Elasticsearch for a separately managed cluster. For stronger production isolation, place the Compose host behind a cloud firewall and inject secrets using a managed secrets service.
+Set `FRONTEND_ORIGIN` to the exact frontend origin including `https://`, and set `VITE_API_BASE_URL` to the HTTPS API origin (for the existing single-host Nginx deployment, use `https://mailflow.legaltalk.help` for both). Firebase uses the configured `VITE_FIREBASE_AUTH_DOMAIN` for its Google sign-in flow; add the frontend hostname to Firebase Authorized domains. Slack OAuth state validation remains enabled. The application stores only verified Google profile identity; Slack bot tokens are encrypted with `SLACK_TOKEN_ENCRYPTION_KEY`. `ELASTICSEARCH_API_KEY` is needed only when using a secured Elasticsearch cluster. The included single-node Elasticsearch disables its own authentication and is intended only on a private deployment network; use managed secured Elasticsearch for a separately managed cluster. For stronger production isolation, place the Compose host behind a cloud firewall and inject secrets using a managed secrets service.
 
 Do not use Ethereal for customer/production sending. Ethereal is a safe demo inbox; this assignment has no production mail provider. For the demo, create an Ethereal account and inject `ETHEREAL_HOST`, `ETHEREAL_PORT`, `ETHEREAL_USER`, and `ETHEREAL_PASSWORD`, with optional `ETHEREAL_FROM`. A successful send returns an SMTP message ID and Ethereal's account UI provides the preview. Never put recipient addresses for real customers in a demo campaign.
 
@@ -299,8 +298,8 @@ The final dependency audit found four high-severity advisories in the pinned Pri
 | `REDIS_URL` | Redis connection string including authentication in production |
 | `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY` | Elasticsearch endpoint and optional API key |
 | `FRONTEND_ORIGIN`, `VITE_API_BASE_URL` | Exact browser origin allowed by API CORS and browser API origin |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google Web OAuth client and callback |
-| `GOOGLE_OAUTH_STATE_SECRET` | Random secret of at least 32 characters for protected OAuth state |
+| `FIREBASE_PROJECT_ID` | Firebase project ID used by the backend ID-token verifier |
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | Firebase Web App configuration embedded in the frontend build; these are public client settings, not server secrets |
 | `SESSION_COOKIE_NAME`, `SESSION_TTL_HOURS` | Application cookie name and database session lifetime |
 | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URI` | Slack OAuth app and callback |
 | `SLACK_OAUTH_STATE_SECRET` | Random secret of at least 32 characters for Slack OAuth state |
@@ -375,4 +374,4 @@ The restart probes restart the local Compose Redis/PostgreSQL containers. Run th
 
 ## Submission readiness
 
-Keep the repository private. Before submission, verify `.env` and `.env.production` are ignored, inspect `git status` and the GitHub remote, scan the staged files for credentials, create the private GitHub repository, push source, then grant `Mitrajit` and `Yadav036` the required repository access. This workspace currently has no Git remote and GitHub CLI is not authenticated, so repository creation and collaborator verification must be completed after GitHub access is configured.
+Keep the repository private. The target repository is `https://github.com/aryanagrawal01/MailFlow`. Before submission, confirm it is private, push the source, tests, migrations, Docker configuration, and documentation, then grant `Mitrajit` and `Yadav036` the required access. Do not include local `.env` files, credentials, tokens, or private keys.
