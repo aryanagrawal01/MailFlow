@@ -1,0 +1,80 @@
+{
+  "name": "@mailflow/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./db/client.js": {
+      "types": "./dist/db/client.d.ts",
+      "import": "./dist/db/client.js"
+    },
+    "./queues/outbox-store.js": {
+      "types": "./dist/queues/outbox-store.d.ts",
+      "import": "./dist/queues/outbox-store.js"
+    },
+    "./elasticsearch/client.js": {
+      "types": "./dist/elasticsearch/client.d.ts",
+      "import": "./dist/elasticsearch/client.js"
+    },
+    "./elasticsearch/indexer.js": {
+      "types": "./dist/elasticsearch/indexer.d.ts",
+      "import": "./dist/elasticsearch/indexer.js"
+    },
+    "./slack/alerts.js": {
+      "types": "./dist/slack/alerts.d.ts",
+      "import": "./dist/slack/alerts.js"
+    },
+    "./slack/token-crypto.js": {
+      "types": "./dist/slack/token-crypto.d.ts",
+      "import": "./dist/slack/token-crypto.js"
+    },
+    "./slack/client.js": {
+      "types": "./dist/slack/client.d.ts",
+      "import": "./dist/slack/client.js"
+    }
+  },
+  "scripts": {
+    "dev": "dotenv -e ../.env -- tsx watch src/server.ts",
+    "build": "npm run db:generate && tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "npm run db:generate && tsc -p tsconfig.json --noEmit",
+    "db:generate": "prisma generate --config prisma.config.ts",
+    "db:migrate:dev": "dotenv -e ../.env -- prisma migrate dev --config prisma.config.ts",
+    "db:migrate:deploy": "dotenv -e ../.env -- prisma migrate deploy --config prisma.config.ts",
+    "db:migrate:status": "dotenv -e ../.env -- prisma migrate status --config prisma.config.ts",
+    "search:reconcile": "dotenv -e ../.env -- tsx src/elasticsearch/reconcile-cli.ts",
+    "pretest:search": "npm run build --workspace @mailflow/shared",
+    "test:db": "npm run db:generate && dotenv -e ../.env -- tsx --test test/database.integration.test.ts",
+    "test:auth": "npm run db:generate && dotenv -e ../.env -- tsx --test test/auth.integration.test.ts",
+    "test:scheduling": "npm run db:generate && dotenv -e ../.env -- tsx --test test/scheduling.integration.test.ts",
+    "test:search": "npm run db:generate && dotenv -e ../.env -- tsx --test test/search.integration.test.ts",
+    "test:operations": "npm run db:generate && dotenv -e ../.env -- tsx --test test/operations.integration.test.ts",
+    "test:redis-restart": "dotenv -e ../.env -- tsx --test test/redis-restart.integration.test.ts",
+    "pretest:slack": "npm run build --workspace @mailflow/shared",
+    "test:slack": "npm run db:generate && dotenv -e ../.env -- tsx --test test/slack.integration.test.ts",
+    "test:load": "npm run db:generate && npm run build --workspace @mailflow/shared && dotenv -e ../.env -- tsx --test test/load.integration.test.ts",
+    "test:postgres-restart": "dotenv -e ../.env -- tsx --test test/postgres-restart.integration.test.ts"
+  },
+  "dependencies": {
+    "@bull-board/api": "^9.10.2",
+    "@bull-board/express": "^9.10.2",
+    "@elastic/elasticsearch": "^9.5.1",
+    "@mailflow/shared": "0.1.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "dotenv": "^17.4.2",
+    "dotenv-cli": "^10.0.0",
+    "express": "^5.1.0",
+    "google-auth-library": "^11.1.0",
+    "pg": "^8.23.0",
+    "pino-http": "^10.5.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "prisma": "7.10.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

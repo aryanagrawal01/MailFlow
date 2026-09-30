@@ -1,0 +1,44 @@
+# Dependencies and generated output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+backend/src/generated/prisma/
+coverage/
+*.tsbuildinfo
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.production.example
+!**/.env.example
+.envrc
+.npmrc
+credentials*.json
+*service-account*.json
+secrets/
+**/secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and local runtime data
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.pnp.*
+.DS_Store
+Thumbs.db
+
+# Editors and operating systems
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Local database / search data (Docker named volumes are not in the repo)
+data/

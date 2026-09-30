@@ -1,0 +1,31 @@
+{
+  "name": "mailflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MailFlow email scheduling platform foundation",
+  "workspaces": [
+    "packages/shared",
+    "backend",
+    "worker",
+    "frontend"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @mailflow/shared",
+    "dev": "npm run build:shared && npm run build --workspace @mailflow/api && concurrently -k -n api,worker,frontend \"npm run dev --workspace @mailflow/api\" \"npm run dev --workspace @mailflow/worker\" \"npm run dev --workspace @mailflow/frontend\"",
+    "dev:api": "npm run build:shared && npm run dev --workspace @mailflow/api",
+    "dev:worker": "npm run build:shared && npm run build --workspace @mailflow/api && npm run dev --workspace @mailflow/worker",
+    "dev:frontend": "npm run dev --workspace @mailflow/frontend",
+    "build": "npm run build:shared && npm run build --workspace @mailflow/api && npm run build --workspace @mailflow/worker && npm run build --workspace @mailflow/frontend",
+    "typecheck": "npm run build:shared && npm run typecheck --workspace @mailflow/api && npm run typecheck --workspace @mailflow/worker && npm run typecheck --workspace @mailflow/frontend",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2",
+    "mysql2": "^3.23.1"
+  }
+}
