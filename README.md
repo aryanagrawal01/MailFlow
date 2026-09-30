@@ -275,6 +275,8 @@ docker compose --env-file .env.production -f docker-compose.production.yml -f do
 
 Start `worker` only after the complete Ethereal SMTP configuration is installed. The EC2 overlay intentionally keeps the existing host Nginx in charge of public ports and uses private loopback bindings for MailFlow.
 
+The checked-in host-specific Nginx configuration is `deploy/nginx/mailflow.conf`. It references the currently installed LegalTalk Origin certificate, whose SAN does not include `mailflow.legaltalk.help`; this matches the host's existing Cloudflare Full (non-Strict) setup. Replace it with a certificate covering the MailFlow hostname before enabling Cloudflare Full (Strict).
+
 The deployment must use the exact callback URIs in the provider consoles:
 
 - Google: `https://<API_DOMAIN>/api/auth/google/callback`
